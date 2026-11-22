@@ -1,6 +1,6 @@
-id=drm_spoofer_universal
-name=Universal Device & DRM Spoofer
-version=v3.0
-versionCode=3
-author=jurasantes-collab
-description=Lightweight Zygisk Anti-Detect Device, LineageOS, DRM, CPU, GPU, RAM & Screen Spoofer
+# Adicione abaixo o package name dos apps alvo (um por linha)
+# Apps fora desta lista nao carregam o modulo na RAM (Zero rastros)
+flar2.devcheck
+com.ytheekshana.deviceinfo
+ru.andr7e.deviceinfohw
+com.zhiliaoapp.musically.go
