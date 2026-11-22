@@ -118,17 +118,20 @@ public:
     }
 
     void preAppSpecialize(AppSpecializeArgs *args) override {
-        const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
-        if (process) {
-            if (strcmp(process, "system_server") == 0 ||
-                strncmp(process, "com.android.", 12) == 0) {
+        if (args->nice_name != nullptr) {
+            const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
+            if (process) {
+                if (strcmp(process, "system_server") == 0 ||
+                    strncmp(process, "com.android.", 12) == 0) {
+                    env->ReleaseStringUTFChars(args->nice_name, process);
+                    api->setOption(zygisk::DLCLOSE_MODULE_LIBRARY);
+                    return;
+                }
                 env->ReleaseStringUTFChars(args->nice_name, process);
-                return;
             }
-            env->ReleaseStringUTFChars(args->nice_name, process);
         }
 
-        int fd = api->connectCompanion(this);
+        int fd = api->connectCompanion();
         if (fd >= 0) {
             ssize_t r = read(fd, custom_drm_id, ID_LEN);
             close(fd);
@@ -139,14 +142,16 @@ public:
     }
 
     void postAppSpecialize(const AppSpecializeArgs *args) override {
-        const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
-        if (process) {
-            if (strcmp(process, "system_server") == 0 ||
-                strncmp(process, "com.android.", 12) == 0) {
+        if (args->nice_name != nullptr) {
+            const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
+            if (process) {
+                if (strcmp(process, "system_server") == 0 ||
+                    strncmp(process, "com.android.", 12) == 0) {
+                    env->ReleaseStringUTFChars(args->nice_name, process);
+                    return;
+                }
                 env->ReleaseStringUTFChars(args->nice_name, process);
-                return;
             }
-            env->ReleaseStringUTFChars(args->nice_name, process);
         }
 
         JNINativeMethod methods[] = {
