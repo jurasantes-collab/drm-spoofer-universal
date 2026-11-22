@@ -24,15 +24,6 @@ static int hooked_system_property_get(const char *name, char *value) {
             strcpy(value, "1");
             return strlen(value);
         }
-        if (strcmp(name, "ro.product.model") == 0) {
-            strcpy(value, "Pixel 8 Pro");
-            return strlen(value);
-        }
-        if (strcmp(name, "ro.product.manufacturer") == 0 ||
-            strcmp(name, "ro.product.brand") == 0) {
-            strcpy(value, "Google");
-            return strlen(value);
-        }
     }
     return res;
 }
