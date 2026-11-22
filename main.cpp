@@ -1,9 +1,11 @@
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
 #include <string>
 #include <vector>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/sysmacros.h>
 #include <sys/system_properties.h>
 #include "zygisk.hpp"
 
@@ -11,7 +13,6 @@ using zygisk::Api;
 using zygisk::AppSpecializeArgs;
 using zygisk::ServerSpecializeArgs;
 
-// Hook em __system_property_get para falsificar propriedades de DRM/Widevine
 static int (*orig_system_property_get)(const char *name, char *value) = nullptr;
 
 static int hooked_system_property_get(const char *name, char *value) {
@@ -49,7 +50,6 @@ public:
     void preAppSpecialize(AppSpecializeArgs *args) override {
         const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
         if (process) {
-            // Ignora processos internos do sistema para evitar instabilidade
             if (strcmp(process, "system_server") == 0 ||
                 strncmp(process, "com.android.", 12) == 0) {
                 api->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
@@ -59,12 +59,11 @@ public:
             env->ReleaseStringUTFChars(args->nice_name, process);
         }
 
-        // Registra hook na libc.so para interceptar leitura de propriedades DRM
         ino_t inode = 0;
         dev_t dev = 0;
         FILE *fp = fopen("/proc/self/maps", "r");
         if (fp) {
-            char line[512];
+            char line;
             while (fgets(line, sizeof(line), fp)) {
                 if (strstr(line, "libc.so")) {
                     unsigned int major = 0, minor = 0;
@@ -93,3 +92,7 @@ private:
 };
 
 REGISTER_ZYGISK_MODULE(DrmSpooferModule)
+
+         
+            
+        
