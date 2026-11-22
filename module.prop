@@ -1,6 +1,6 @@
-# Adicione abaixo o package name dos apps alvo (um por linha)
-# Apps fora desta lista nao carregam o modulo na RAM (Zero rastros)
-flar2.devcheck
-com.ytheekshana.deviceinfo
-ru.andr7e.deviceinfohw
-com.zhiliaoapp.musically.go
+id=drm_spoofer_universal
+name=DRM Spoofer Universal
+version=1.0
+versionCode=1
+author=Dev
+description=Modulo Zygisk para spoofing de hardware e DRM
