@@ -1,9 +1,8 @@
 # ==========================================================
-# PERFIL COMPLETO: SAMSUNG GALAXY NOTE 9 (SM-N9600)
-# Editavel a qualquer momento via MT Manager
+# PERFIL COMPLETO (ESTILO TARGETEDFIX V5 + HARDWARE NATIVO)
 # ==========================================================
 
-# --- BUILD FIELDS (JAVA android.os.Build) ---
+# --- BUILD FIELDS (Java android.os.Build) ---
 MANUFACTURER=samsung
 MODEL=SM-N9600
 FINGERPRINT=samsung/crownqlteub/crownqlte:9/PPR1.180610.011/N9600ZHS4CSL2:user/release-keys
@@ -20,7 +19,6 @@ TIME=1576769410000
 TYPE=user
 TAGS=release-keys
 SECURITY_PATCH=2019-12-01
-DEVICE_INITIAL_SDK_INT=27
 SDK_INT=28
 
 # --- WILDCARDS NATIVOS ---
@@ -82,7 +80,7 @@ ro.system.build.date=Thu Dec 19 15:30:10 KST 2019
 ro.system.build.date.utc=1576769410
 gsm.version.baseband=N9600ZHS4CSL2,N9600ZHS4CSL2
 
-# --- DNA OFICIAL SAMSUNG (One UI 1.0 e Release Keys) ---
+# --- DNA OFICIAL SAMSUNG (One UI & Release Keys) ---
 ro.build.version.sem=2801
 ro.build.version.sep=100100
 ro.build.version.oneui=10000
@@ -99,25 +97,6 @@ ro.product.build.tags=release-keys
 ro.product.build.type=user
 ro.odm.build.tags=release-keys
 ro.odm.build.type=user
-
-# --- ZERAR RASTROS DE CUSTOM ROM ---
-ro.lineage.version=
-ro.lineage.display.version=
-ro.lineage.build.version=
-ro.lineage.device=
-ro.lineage.releasetype=
-ro.crdroid.version=
-ro.crdroid.display.version=
-ro.crdroid.build.type=
-ro.evolution.version=
-ro.evolution.build_type=
-ro.evolution.device=
-ro.arrow.version=
-ro.havoc.version=
-ro.bliss.version=
-ro.pixelexperience.version=
-ro.modversion=
-ro.rom.version=
 
 # --- BOOTLOADER, SERIAL E KNOX ---
 ro.bootloader=N9600ZHS4CSL2
@@ -141,18 +120,28 @@ ro.csc.countryiso_code=BR
 ro.csc.sales_code=ZTO
 ro.build.characteristics=phone
 
-# --- KERNEL, CPU, GPU, RAM, ARMAZENAMENTO E TELA ---
+# --- KERNEL LINUX (/proc/version e uname) ---
 kernel_release=4.9.112-17257921
 kernel_version=#1 SMP PREEMPT Thu Dec 19 15:30:10 KST 2019
+full_proc_version=Linux version 4.9.112-17257921 (dpi@SWDH8411) (gcc version 4.9.x 20150123 (prerelease) (GCC)) #1 SMP PREEMPT Thu Dec 19 15:30:10 KST 2019
+
+# --- CPU, GPU, RAM, ARMAZENAMENTO E TELA + SYSFS ---
 cpu_hardware=Qualcomm Technologies, Inc SDM845
 cpu_model_name=ARMv8 Processor rev 12 (v8l)
 cpu_cores=8
 cpu_arch=aarch64
+cpu_max_freq=2803200
+cpu_min_freq=300000
+soc_id=321
+
 gpu_vendor=Qualcomm
 gpu_renderer=Adreno (TM) 630
-gpu_version=OpenGL ES 3.2 V@331.0 (GIT@4e6d2c1, I8a9b3c4d5e)
+gpu_version=OpenGL ES 3.2 V@0415.0
+gpu_model_sysfs=Adreno630v2
+
 ram_gb=6
 storage_gb=128
+
 screen_width=1440
 screen_height=2960
 screen_dpi=560
