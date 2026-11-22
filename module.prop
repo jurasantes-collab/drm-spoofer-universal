@@ -1,6 +1,6 @@
 id=drm_spoofer_universal
-name=DRM & Hardware Spoofer Universal
-version=v2.0
-versionCode=2
+name=Universal Device & DRM Spoofer
+version=v3.0
+versionCode=3
 author=jurasantes-collab
-description=Universal Zygisk DRM, CPU, GPU, RAM, Storage & Screen Spoofer
+description=Lightweight Zygisk Anti-Detect Device, LineageOS, DRM, CPU, GPU, RAM & Screen Spoofer
