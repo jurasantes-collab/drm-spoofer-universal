@@ -37,13 +37,13 @@ static void generate_random_id(jbyte *out) {
 }
 
 static bool is_target_package(const char *pkg_name) {
-    FILE *fp = fopen("/data/adb/modules/drm_spoofer_universal/target.txt", "r");
+    FILE *fp = fopen("/data/adb/modules/drm_spoofer_universal/target.prop", "r");
     if (fp == nullptr) return false;
 
     char line[LINE_LEN];
     bool matched = false;
     while (fgets(line, LINE_LEN, fp)) {
-        if (line == '#' || line == '\n' || line == '\r') continue;
+        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
         size_t len = strcspn(line, "\r\n ");
         line[len] = '\0';
         if (len > 0 && strcmp(line, pkg_name) == 0) {
@@ -88,7 +88,7 @@ static void companion_handler(int client) {
     if (fp != nullptr) {
         char line[LINE_LEN];
         while (fgets(line, LINE_LEN, fp)) {
-            if (line == '#' || line == '\n' || line == '\r') continue;
+            if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
             if (strncmp(line, "drm_id=", 7) == 0) {
                 char *val = line + 7;
                 size_t len = strcspn(val, "\r\n");
@@ -170,7 +170,6 @@ public:
             return;
         }
 
-        // Ignora processos secundários (ex: com.app:service) pegando apenas o pacote base
         char base_pkg[LINE_LEN];
         size_t pkg_len = strcspn(process, ":");
         if (pkg_len >= LINE_LEN) pkg_len = LINE_LEN - 1;
@@ -193,7 +192,6 @@ public:
             close(fd);
         }
 
-        // Remove completamente da memória RAM se não for o app alvo
         if (!should_spoof) {
             api->setOption(zygisk::DLCLOSE_MODULE_LIBRARY);
         }
@@ -207,7 +205,7 @@ public:
         };
 
         api->hookJniNativeMethods(env, "android/media/MediaDrm", methods, 1);
-        orig_getPropertyByteArray = reinterpret_cast<jbyteArray (*)(JNIEnv *, jobject, jstring)>(methods.fnPtr);
+        orig_getPropertyByteArray = reinterpret_cast<jbyteArray (*)(JNIEnv *, jobject, jstring)>(methods[0].fnPtr);
         if (orig_getPropertyByteArray == hooked_getPropertyByteArray) {
             orig_getPropertyByteArray = nullptr;
         }
