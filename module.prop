@@ -1,0 +1,6 @@
+id=drm_spoofer_universal
+name=DRM Spoofer Universal
+version=v1.0
+versionCode=1
+author=jurasantes-collab
+description=Universal Zygisk DRM/Widevine Spoofer (ARM64, ARM32, x86, x86_64)
