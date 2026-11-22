@@ -92,7 +92,3 @@ private:
 };
 
 REGISTER_ZYGISK_MODULE(DrmSpooferModule)
-
-         
-            
-        
