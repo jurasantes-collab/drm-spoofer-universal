@@ -23,20 +23,21 @@ jobs:
           cp module.prop out/
           cp drm.prop out/
           cp target.prop out/
+          cp device.prop out/
 
           TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
 
           # ARM64
-          $TOOLCHAIN/aarch64-linux-android21-clang++ -std=c++17 -O2 -shared -fPIC main.cpp -o out/zygisk/arm64-v8a.so -llog
+          $TOOLCHAIN/aarch64-linux-android21-clang++ -std=c++17 -O2 -shared -fPIC main.cpp -o out/zygisk/arm64-v8a.so -llog -lGLESv2
 
           # ARM32
-          $TOOLCHAIN/armv7a-linux-androideabi21-clang++ -std=c++17 -O2 -shared -fPIC main.cpp -o out/zygisk/armeabi-v7a.so -llog
+          $TOOLCHAIN/armv7a-linux-androideabi21-clang++ -std=c++17 -O2 -shared -fPIC main.cpp -o out/zygisk/armeabi-v7a.so -llog -lGLESv2
 
           # x86
-          $TOOLCHAIN/i686-linux-android21-clang++ -std=c++17 -O2 -shared -fPIC main.cpp -o out/zygisk/x86.so -llog
+          $TOOLCHAIN/i686-linux-android21-clang++ -std=c++17 -O2 -shared -fPIC main.cpp -o out/zygisk/x86.so -llog -lGLESv2
 
           # x86_64
-          $TOOLCHAIN/x86_64-linux-android21-clang++ -std=c++17 -O2 -shared -fPIC main.cpp -o out/zygisk/x86_64.so -llog
+          $TOOLCHAIN/x86_64-linux-android21-clang++ -std=c++17 -O2 -shared -fPIC main.cpp -o out/zygisk/x86_64.so -llog -lGLESv2
 
       - name: Package Magisk Module ZIP
         run: |
