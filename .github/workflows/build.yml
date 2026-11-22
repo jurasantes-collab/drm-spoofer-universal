@@ -40,10 +40,27 @@ jobs:
       - name: Package Magisk Module ZIP
         run: |
           mkdir -p out/META-INF/com/google/android
-          git clone --depth 1 --filter=blob:none --sparse https://github.com magisk_tmp
-          cd magisk_tmp && git sparse-checkout set scripts/module_installer.sh && cd ..
-          cp magisk_tmp/scripts/module_installer.sh out/META-INF/com/google/android/update-binary
           echo "#MAGISK" > out/META-INF/com/google/android/updater-script
+          cat << 'EOF' > out/META-INF/com/google/android/update-binary
+          #!/sbin/sh
+          umask 022
+          ui_print() { echo "$1"; }
+          require_new_magisk() {
+            ui_print "*******************************"
+            ui_print " Please install Magisk v20.4+! "
+            ui_print "*******************************"
+            exit 1
+          }
+          OUTFD=$2
+          ZIPFILE=$3
+          mount /data 2>/dev/null
+          [ -f /data/adb/magisk/util_functions.sh ] || require_new_magisk
+          . /data/adb/magisk/util_functions.sh
+          [ $MAGISK_VER_CODE -lt 20400 ] && require_new_magisk
+          install_module
+          exit 0
+          EOF
+          chmod 755 out/META-INF/com/google/android/update-binary
           cd out
           zip -r ../drm-spoofer-universal.zip .
 
