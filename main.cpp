@@ -1,8 +1,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
-#include <string>
-#include <vector>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/sysmacros.h>
@@ -11,7 +9,6 @@
 
 using zygisk::Api;
 using zygisk::AppSpecializeArgs;
-using zygisk::ServerSpecializeArgs;
 
 static int (*orig_system_property_get)(const char *name, char *value) = nullptr;
 
@@ -52,7 +49,6 @@ public:
         if (process) {
             if (strcmp(process, "system_server") == 0 ||
                 strncmp(process, "com.android.", 12) == 0) {
-                api->setOption(zygisk::Option::DLCLOSE_MODULE_LIBRARY);
                 env->ReleaseStringUTFChars(args->nice_name, process);
                 return;
             }
@@ -63,17 +59,20 @@ public:
         dev_t dev = 0;
         FILE *fp = fopen("/proc/self/maps", "r");
         if (fp) {
-            char line;
-            while (fgets(line, sizeof(line), fp)) {
-                if (strstr(line, "libc.so")) {
-                    unsigned int major = 0, minor = 0;
-                    unsigned long ino = 0;
-                    if (sscanf(line, "%*x-%*x %*s %*x %x:%x %lu", &major, &minor, &ino) == 3) {
-                        dev = makedev(major, minor);
-                        inode = ino;
-                        break;
+            char *line = (char *)malloc(512);
+            if (line) {
+                while (fgets(line, 512, fp)) {
+                    if (strstr(line, "libc.so")) {
+                        unsigned int major = 0, minor = 0;
+                        unsigned long ino = 0;
+                        if (sscanf(line, "%*x-%*x %*s %*x %x:%x %lu", &major, &minor, &ino) == 3) {
+                            dev = makedev(major, minor);
+                            inode = ino;
+                            break;
+                        }
                     }
                 }
+                free(line);
             }
             fclose(fp);
         }
