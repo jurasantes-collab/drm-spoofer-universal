@@ -25,22 +25,22 @@ jobs:
 
           TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
 
-          # ARM64 (64 bits)
+          # ARM64
           $TOOLCHAIN/aarch64-linux-android21-clang++ -std=c++17 -O2 -shared -fPIC main.cpp -o out/zygisk/arm64-v8a.so -llog
 
-          # ARM32 (armeabi-v7a)
+          # ARM32
           $TOOLCHAIN/armv7a-linux-androideabi21-clang++ -std=c++17 -O2 -shared -fPIC main.cpp -o out/zygisk/armeabi-v7a.so -llog
 
-          # x86 (32 bits)
+          # x86
           $TOOLCHAIN/i686-linux-android21-clang++ -std=c++17 -O2 -shared -fPIC main.cpp -o out/zygisk/x86.so -llog
 
-          # x86_64 (64 bits)
+          # x86_64
           $TOOLCHAIN/x86_64-linux-android21-clang++ -std=c++17 -O2 -shared -fPIC main.cpp -o out/zygisk/x86_64.so -llog
 
       - name: Package Magisk Module ZIP
         run: |
           mkdir -p out/META-INF/com/google/android
-          curl -sL https://githubusercontent.com -o out/META-INF/com/google/android/update-binary
+          curl -fsSL "https://githubusercontent.com" -o out/META-INF/com/google/android/update-binary
           echo "#MAGISK" > out/META-INF/com/google/android/updater-script
           cd out
           zip -r ../drm-spoofer-universal.zip .
