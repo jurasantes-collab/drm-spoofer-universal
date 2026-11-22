@@ -15,7 +15,7 @@ constexpr int LINE_LEN = 512;
 
 static jbyteArray (*orig_getPropertyByteArray)(JNIEnv *env, jobject thiz, jstring propertyName) = nullptr;
 static jbyte custom_drm_id[ID_LEN];
-static bool drm_id_ready = false;
+static bool should_spoof = false;
 
 static int hex_val(char c) {
     if (c >= '0' && c <= '9') return c - '0';
@@ -36,7 +36,50 @@ static void generate_random_id(jbyte *out) {
     }
 }
 
+static bool is_target_package(const char *pkg_name) {
+    FILE *fp = fopen("/data/adb/modules/drm_spoofer_universal/target.txt", "r");
+    if (fp == nullptr) return false;
+
+    char line[LINE_LEN];
+    bool matched = false;
+    while (fgets(line, LINE_LEN, fp)) {
+        if (line == '#' || line == '\n' || line == '\r') continue;
+        size_t len = strcspn(line, "\r\n ");
+        line[len] = '\0';
+        if (len > 0 && strcmp(line, pkg_name) == 0) {
+            matched = true;
+            break;
+        }
+    }
+    fclose(fp);
+    return matched;
+}
+
 static void companion_handler(int client) {
+    uint32_t pkg_len = 0;
+    if (read(client, &pkg_len, sizeof(pkg_len)) != sizeof(pkg_len) || pkg_len == 0 || pkg_len >= LINE_LEN) {
+        uint8_t allow = 0;
+        write(client, &allow, 1);
+        close(client);
+        return;
+    }
+
+    char pkg_name[LINE_LEN];
+    memset(pkg_name, 0, LINE_LEN);
+    if (read(client, pkg_name, pkg_len) != static_cast<ssize_t>(pkg_len)) {
+        uint8_t allow = 0;
+        write(client, &allow, 1);
+        close(client);
+        return;
+    }
+
+    if (!is_target_package(pkg_name)) {
+        uint8_t allow = 0;
+        write(client, &allow, 1);
+        close(client);
+        return;
+    }
+
     jbyte id_buf[ID_LEN];
     memset(id_buf, 0, ID_LEN);
     bool found = false;
@@ -45,7 +88,7 @@ static void companion_handler(int client) {
     if (fp != nullptr) {
         char line[LINE_LEN];
         while (fgets(line, LINE_LEN, fp)) {
-            if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') continue;
+            if (line == '#' || line == '\n' || line == '\r') continue;
             if (strncmp(line, "drm_id=", 7) == 0) {
                 char *val = line + 7;
                 size_t len = strcspn(val, "\r\n");
@@ -78,6 +121,8 @@ static void companion_handler(int client) {
         generate_random_id(id_buf);
     }
 
+    uint8_t allow = 1;
+    write(client, &allow, 1);
     write(client, id_buf, ID_LEN);
     close(client);
 }
@@ -90,10 +135,6 @@ static jbyteArray hooked_getPropertyByteArray(JNIEnv *env, jobject thiz, jstring
             env->ReleaseStringUTFChars(propertyName, prop);
 
             if (is_device_id) {
-                if (!drm_id_ready) {
-                    generate_random_id(custom_drm_id);
-                    drm_id_ready = true;
-                }
                 jbyteArray result = env->NewByteArray(ID_LEN);
                 if (result != nullptr) {
                     env->SetByteArrayRegion(result, 0, ID_LEN, custom_drm_id);
@@ -118,48 +159,55 @@ public:
     }
 
     void preAppSpecialize(AppSpecializeArgs *args) override {
-        if (args->nice_name != nullptr) {
-            const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
-            if (process) {
-                if (strcmp(process, "system_server") == 0 ||
-                    strncmp(process, "com.android.", 12) == 0) {
-                    env->ReleaseStringUTFChars(args->nice_name, process);
-                    api->setOption(zygisk::DLCLOSE_MODULE_LIBRARY);
-                    return;
-                }
-                env->ReleaseStringUTFChars(args->nice_name, process);
-            }
+        if (args->nice_name == nullptr) {
+            api->setOption(zygisk::DLCLOSE_MODULE_LIBRARY);
+            return;
         }
+
+        const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
+        if (!process) {
+            api->setOption(zygisk::DLCLOSE_MODULE_LIBRARY);
+            return;
+        }
+
+        // Ignora processos secundários (ex: com.app:service) pegando apenas o pacote base
+        char base_pkg[LINE_LEN];
+        size_t pkg_len = strcspn(process, ":");
+        if (pkg_len >= LINE_LEN) pkg_len = LINE_LEN - 1;
+        memcpy(base_pkg, process, pkg_len);
+        base_pkg[pkg_len] = '\0';
+        env->ReleaseStringUTFChars(args->nice_name, process);
 
         int fd = api->connectCompanion();
         if (fd >= 0) {
-            ssize_t r = read(fd, custom_drm_id, ID_LEN);
-            close(fd);
-            if (r == ID_LEN) {
-                drm_id_ready = true;
+            uint32_t len32 = static_cast<uint32_t>(pkg_len);
+            write(fd, &len32, sizeof(len32));
+            write(fd, base_pkg, pkg_len);
+
+            uint8_t allow = 0;
+            if (read(fd, &allow, 1) == 1 && allow == 1) {
+                if (read(fd, custom_drm_id, ID_LEN) == ID_LEN) {
+                    should_spoof = true;
+                }
             }
+            close(fd);
+        }
+
+        // Remove completamente da memória RAM se não for o app alvo
+        if (!should_spoof) {
+            api->setOption(zygisk::DLCLOSE_MODULE_LIBRARY);
         }
     }
 
     void postAppSpecialize(const AppSpecializeArgs *args) override {
-        if (args->nice_name != nullptr) {
-            const char *process = env->GetStringUTFChars(args->nice_name, nullptr);
-            if (process) {
-                if (strcmp(process, "system_server") == 0 ||
-                    strncmp(process, "com.android.", 12) == 0) {
-                    env->ReleaseStringUTFChars(args->nice_name, process);
-                    return;
-                }
-                env->ReleaseStringUTFChars(args->nice_name, process);
-            }
-        }
+        if (!should_spoof) return;
 
         JNINativeMethod methods[] = {
             { "getPropertyByteArray", "(Ljava/lang/String;)[B", (void *)hooked_getPropertyByteArray }
         };
 
         api->hookJniNativeMethods(env, "android/media/MediaDrm", methods, 1);
-        orig_getPropertyByteArray = reinterpret_cast<jbyteArray (*)(JNIEnv *, jobject, jstring)>(methods[0].fnPtr);
+        orig_getPropertyByteArray = reinterpret_cast<jbyteArray (*)(JNIEnv *, jobject, jstring)>(methods.fnPtr);
         if (orig_getPropertyByteArray == hooked_getPropertyByteArray) {
             orig_getPropertyByteArray = nullptr;
         }
