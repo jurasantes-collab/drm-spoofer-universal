@@ -36,7 +36,6 @@ static void generate_random_id(jbyte *out) {
     }
 }
 
-// Processo root auxiliar que le /data/adb/modules/drm_spoofer_universal/drm.prop
 static void companion_handler(int client) {
     jbyte id_buf[ID_LEN];
     memset(id_buf, 0, ID_LEN);
@@ -129,7 +128,7 @@ public:
             env->ReleaseStringUTFChars(args->nice_name, process);
         }
 
-        int fd = api->connectCompanion();
+        int fd = api->connectCompanion(this);
         if (fd >= 0) {
             ssize_t r = read(fd, custom_drm_id, ID_LEN);
             close(fd);
@@ -155,7 +154,7 @@ public:
         };
 
         api->hookJniNativeMethods(env, "android/media/MediaDrm", methods, 1);
-        orig_getPropertyByteArray = reinterpret_cast<jbyteArray (*)(JNIEnv *, jobject, jstring)>(methods->fnPtr);
+        orig_getPropertyByteArray = reinterpret_cast<jbyteArray (*)(JNIEnv *, jobject, jstring)>(methods[0].fnPtr);
         if (orig_getPropertyByteArray == hooked_getPropertyByteArray) {
             orig_getPropertyByteArray = nullptr;
         }
