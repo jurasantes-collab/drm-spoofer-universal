@@ -40,7 +40,9 @@ jobs:
       - name: Package Magisk Module ZIP
         run: |
           mkdir -p out/META-INF/com/google/android
-          curl -fsSL "https://githubusercontent.com" -o out/META-INF/com/google/android/update-binary
+          git clone --depth 1 --filter=blob:none --sparse https://github.com magisk_tmp
+          cd magisk_tmp && git sparse-checkout set scripts/module_installer.sh && cd ..
+          cp magisk_tmp/scripts/module_installer.sh out/META-INF/com/google/android/update-binary
           echo "#MAGISK" > out/META-INF/com/google/android/updater-script
           cd out
           zip -r ../drm-spoofer-universal.zip .
