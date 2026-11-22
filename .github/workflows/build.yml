@@ -17,11 +17,11 @@ jobs:
         with:
           ndk-version: r26d
 
-      - name: Fix line buffer and compile for all ABIs
+      - name: Compile for all ABIs
         run: |
-          sed -i 's/char line;/char line;/g' main.cpp
           mkdir -p out/zygisk
           cp module.prop out/
+          cp drm.prop out/
 
           TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
 
