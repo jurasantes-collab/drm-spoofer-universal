@@ -1,0 +1,23 @@
+# ==========================================
+# CONFIGURACAO DE HARDWARE (EDITAVEL)
+# ==========================================
+
+# --- MEMORIA RAM E ARMAZENAMENTO (em GB) ---
+ram_gb=12
+storage_gb=512
+
+# --- CPU (Processador) ---
+cpu_hardware=Qualcomm Technologies, Inc SM8650
+cpu_model_name=ARMv8 Processor rev 0 (v8l)
+cpu_cores=8
+cpu_arch=aarch64
+
+# --- GPU (Placa de Video / OpenGL) ---
+gpu_vendor=Qualcomm
+gpu_renderer=Adreno (TM) 750
+gpu_version=OpenGL ES 3.2 V@0762.0
+
+# --- RESOLUCAO DE TELA ---
+screen_width=1440
+screen_height=3120
+screen_dpi=600
