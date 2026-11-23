@@ -19,6 +19,7 @@ jobs:
 
       - name: Compile for all ABIs
         run: |
+          rm -rf out drm-spoofer-universal.zip
           mkdir -p out/zygisk
           cp module.prop out/
           cp drm.prop out/
@@ -64,8 +65,7 @@ jobs:
           exit 0
           EOF
           chmod 755 out/META-INF/com/google/android/update-binary
-          cd out
-          zip -r ../drm-spoofer-universal.zip .
+          (cd out && zip -r ../drm-spoofer-universal.zip .)
 
       - name: Upload Module ZIP
         uses: actions/upload-artifact@v4
