@@ -12,28 +12,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r26d
 
-      - name: Compile for Zygisk ABIs
+      - name: Compile DEX and Zygisk ABIs
         run: |
           set -e
-          rm -rf out drm-spoofer-universal.zip
-          mkdir -p out/zygisk out/config
-          cp module.prop out/
-          cp drm.prop out/
-          cp target.prop out/
-          cp device.prop out/
-          cp service.sh out/
-          cp customize.sh out/
-          cp config/target.txt config/fix.prop out/config/
+          rm -rf out build_dex drm-spoofer-universal.zip
+          mkdir -p out/zygisk out/config build_dex
 
-          # Garante quebras de linha LF em scripts e arquivos de configuração
+          ANDROID_JAR=$(find "$ANDROID_HOME/platforms" -name "android.jar" | sort -V | tail -n 1)
+          D8_BIN=$(find "$ANDROID_HOME/build-tools" -name "d8" | sort -V | tail -n 1)
+          javac --release 8 -cp "$ANDROID_JAR" -d build_dex SpoofEntry.java
+          "$D8_BIN" --min-api 21 --output out build_dex/com/syscore/spoofer/SpoofEntry.class
+
+          cp module.prop drm.prop target.prop device.prop service.sh customize.sh out/
+          cp config/target.txt config/fix.prop out/config/
           find out -type f \( -name "*.sh" -o -name "*.prop" -o -name "*.txt" \) -exec sed -i 's/\r$//' {} +
           chmod 755 out/service.sh out/customize.sh
-          chmod 644 out/config/target.txt out/config/fix.prop
+          chmod 644 out/classes.dex out/config/target.txt out/config/fix.prop
 
           TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
           FLAGS="-std=c++17 -O2 -shared -fPIC -fvisibility=hidden -static-libstdc++ -Wl,--gc-sections -s"
