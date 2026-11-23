@@ -14,7 +14,7 @@
 #include <algorithm>
 #include "zygisk.hpp"
 
-// Mantenha comentado para nao deixar rastros em logcat
+// Mantenha desativado para evitar rastro em logcat
 // #define SPOOF_DEBUG
 
 #ifdef SPOOF_DEBUG
@@ -36,9 +36,7 @@ struct ScopedFd {
     int fd = -1;
     explicit ScopedFd(int f) : fd(f) {}
     ~ScopedFd() {
-        if (fd >= 0) {
-            close(fd);
-        }
+        if (fd >= 0) close(fd);
     }
     ScopedFd(const ScopedFd &) = delete;
     ScopedFd &operator=(const ScopedFd &) = delete;
@@ -47,9 +45,7 @@ struct ScopedFd {
 inline void wipeString(std::string &s) {
     if (!s.empty()) {
         volatile char *p = const_cast<volatile char *>(s.data());
-        for (size_t i = 0; i < s.size(); ++i) {
-            p[i] = 0;
-        }
+        for (size_t i = 0; i < s.size(); ++i) p[i] = 0;
         s.clear();
         s.shrink_to_fit();
     }
@@ -86,9 +82,7 @@ std::unordered_set<std::string> loadTargets(const std::string &path) {
     std::string line;
     while (std::getline(ifs, line)) {
         const std::string c = trim(line);
-        if (!c.empty() && c[0] != '#') {
-            set.insert(c);
-        }
+        if (!c.empty() && c[0] != '#') set.insert(c);
     }
     return set;
 }
@@ -108,9 +102,7 @@ std::unordered_map<std::string, std::string> loadKeyVals(const std::string &path
 
         const std::string k = trim(c.substr(0, eq));
         const std::string v = trim(c.substr(eq + 1));
-        if (!k.empty()) {
-            map[k] = v;
-        }
+        if (!k.empty()) map[k] = v;
     }
     return map;
 }
@@ -158,35 +150,80 @@ ActiveRuntimeState &runtimeState() {
     return s;
 }
 
-int (*orig_system_property_get)(const char *name, char *value) = nullptr;
+bool lookupOverrideLocked(const ActiveRuntimeState &st, const char *name, std::string &out_val) {
+    if (!st.enabled || !name) return false;
 
-// Sem alocacao dinamica nem acesso a disco dentro do hook
+    if (std::strcmp(name, "persist.sys.drm_id") == 0 || std::strcmp(name, "ro.drm.id") == 0) {
+        if (!st.drm_id.empty()) {
+            out_val = st.drm_id;
+            return true;
+        }
+    }
+
+    auto it = st.props.find(name);
+    if (it != st.props.end() && !it->second.empty()) {
+        out_val = it->second;
+        return true;
+    }
+    return false;
+}
+
+int (*orig_system_property_get)(const char *name, char *value) = nullptr;
+void (*orig_system_property_read_callback)(
+    const prop_info *pi,
+    void (*callback)(void *cookie, const char *name, const char *value, uint32_t serial),
+    void *cookie) = nullptr;
+
 int hooked_system_property_get(const char *name, char *value) {
     if (!orig_system_property_get) return 0;
 
     if (name && value) {
         auto &st = runtimeState();
         std::lock_guard<std::mutex> lock(st.mtx);
-        if (st.enabled) {
-            if (std::strcmp(name, "persist.sys.drm_id") == 0 || std::strcmp(name, "ro.drm.id") == 0) {
-                if (!st.drm_id.empty()) {
-                    const size_t n = std::min(st.drm_id.size(), kMaxPropLen);
-                    std::memcpy(value, st.drm_id.data(), n);
-                    value[n] = '\0';
-                    return static_cast<int>(n);
-                }
-            }
-
-            auto it = st.props.find(name);
-            if (it != st.props.end() && !it->second.empty()) {
-                const size_t n = std::min(it->second.size(), kMaxPropLen);
-                std::memcpy(value, it->second.data(), n);
-                value[n] = '\0';
-                return static_cast<int>(n);
-            }
+        std::string override_val;
+        if (lookupOverrideLocked(st, name, override_val)) {
+            const size_t n = std::min(override_val.size(), kMaxPropLen);
+            std::memcpy(value, override_val.data(), n);
+            value[n] = '\0';
+            wipeString(override_val);
+            return static_cast<int>(n);
         }
     }
     return orig_system_property_get(name, value);
+}
+
+void hooked_system_property_read_callback(
+    const prop_info *pi,
+    void (*callback)(void *cookie, const char *name, const char *value, uint32_t serial),
+    void *cookie) {
+    if (!orig_system_property_read_callback) return;
+    if (!pi || !callback) {
+        orig_system_property_read_callback(pi, callback, cookie);
+        return;
+    }
+
+    char prop_name[PROP_NAME_MAX] = {0};
+    char prop_val[PROP_VALUE_MAX] = {0};
+    __system_property_read(pi, prop_name, prop_val);
+    std::memset(prop_val, 0, sizeof(prop_val));
+
+    if (prop_name[0] != '\0') {
+        auto &st = runtimeState();
+        std::lock_guard<std::mutex> lock(st.mtx);
+        std::string override_val;
+        if (lookupOverrideLocked(st, prop_name, override_val)) {
+            char safe_val[PROP_VALUE_MAX] = {0};
+            const size_t n = std::min(override_val.size(), kMaxPropLen);
+            std::memcpy(safe_val, override_val.data(), n);
+            safe_val[n] = '\0';
+            wipeString(override_val);
+            callback(cookie, prop_name, safe_val, 1);
+            std::memset(safe_val, 0, sizeof(safe_val));
+            return;
+        }
+    }
+
+    orig_system_property_read_callback(pi, callback, cookie);
 }
 
 void applyJavaStringField(JNIEnv *env, jclass cls, const char *field, const std::string &val) {
@@ -220,9 +257,7 @@ void applyJavaBuildSpoof(JNIEnv *env, const std::unordered_map<std::string, std:
         };
         for (const char *f : kBuildFields) {
             auto it = props.find(f);
-            if (it != props.end()) {
-                applyJavaStringField(env, build_cls, f, it->second);
-            }
+            if (it != props.end()) applyJavaStringField(env, build_cls, f, it->second);
         }
         env->DeleteLocalRef(build_cls);
     }
@@ -238,9 +273,7 @@ void applyJavaBuildSpoof(JNIEnv *env, const std::unordered_map<std::string, std:
         };
         for (const char *vf : kVerFields) {
             auto it = props.find(vf);
-            if (it != props.end()) {
-                applyJavaStringField(env, ver_cls, vf, it->second);
-            }
+            if (it != props.end()) applyJavaStringField(env, ver_cls, vf, it->second);
         }
         env->DeleteLocalRef(ver_cls);
     }
@@ -306,6 +339,9 @@ public:
             api_->pltHookRegister(".*", "__system_property_get",
                                   reinterpret_cast<void *>(&hooked_system_property_get),
                                   reinterpret_cast<void **>(&orig_system_property_get));
+            api_->pltHookRegister(".*", "__system_property_read_callback",
+                                  reinterpret_cast<void *>(&hooked_system_property_read_callback),
+                                  reinterpret_cast<void **>(&orig_system_property_read_callback));
             api_->pltHookCommit();
         }
 
