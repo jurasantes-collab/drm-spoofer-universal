@@ -339,4 +339,90 @@ public:
         std::string pkg(raw);
         env_->ReleaseStringUTFChars(args->nice_name, raw);
 
-        if (pkg.empty
+        if (pkg.empty()) {
+            LOGE("preAppSpecialize: pkg vazio");
+            return;
+        }
+        LOGD("preAppSpecialize: processo=%s", pkg.c_str());
+
+        const std::string base = resolveModuleDir(api_);
+        const auto targets = loadTargets(base + "/target.prop");
+        if (targets.find(pkg) == targets.end()) {
+            LOGD("preAppSpecialize: %s nao esta no target.prop", pkg.c_str());
+            wipeString(pkg);
+            return;
+        }
+
+        matched_ = true;
+        staged_props_ = loadKeyVals(base + "/device.prop");
+
+        const auto drm_kv = loadKeyVals(base + "/drm.prop");
+        auto it_drm = drm_kv.find("drm_id");
+        if (it_drm != drm_kv.end() && !it_drm->second.empty()) {
+            staged_drm_ = it_drm->second;
+        } else {
+            staged_drm_ = generateHex32Bytes();
+        }
+
+        LOGD("Target matched: %s (props=%zu)", pkg.c_str(), staged_props_.size());
+        wipeString(pkg);
+    }
+
+    void postAppSpecialize(const AppSpecializeArgs *args) override {
+        (void)args;
+        if (!matched_) return;
+
+        LOGD("postAppSpecialize: iniciando injecao (pid=%d)", getpid());
+        applyJavaBuildSpoof(env_, staged_props_);
+
+        {
+            auto &st = runtimeState();
+            std::lock_guard<std::mutex> lock(st.mtx);
+            st.props = std::move(staged_props_);
+            st.drm_id = std::move(staged_drm_);
+            st.enabled = true;
+        }
+
+        if (api_) {
+            api_->pltHookRegister(".*", "__system_property_get",
+                                  reinterpret_cast<void *>(&hooked_system_property_get),
+                                  reinterpret_cast<void **>(&orig_system_property_get));
+#if defined(__ANDROID_API__) && __ANDROID_API__ >= 29
+            api_->pltHookRegister(".*", "__system_property_read_callback",
+                                  reinterpret_cast<void *>(&hooked_system_property_read_callback),
+                                  reinterpret_cast<void **>(&orig_system_property_read_callback));
+#endif
+            bool ok = api_->pltHookCommit();
+            LOGD("pltHookCommit=%d orig_get=%p", ok ? 1 : 0, orig_system_property_get);
+        } else {
+            LOGE("postAppSpecialize: api_ null no pltHook");
+        }
+
+        clearStaging();
+        LOGD("Runtime hooks committed");
+    }
+
+    void preServerSpecialize(ServerSpecializeArgs *args) override { (void)args; }
+    void postServerSpecialize(const ServerSpecializeArgs *args) override { (void)args; }
+
+private:
+    void clearStaging() {
+        matched_ = false;
+        wipeString(staged_drm_);
+        for (auto &kv : staged_props_) {
+            std::string k = kv.first;
+            std::string v = kv.second;
+            wipeString(k);
+            wipeString(v);
+        }
+        staged_props_.clear();
+    }
+
+    Api *api_ = nullptr;
+    JNIEnv *env_ = nullptr;
+    bool matched_ = false;
+    std::string staged_drm_;
+    std::unordered_map<std::string, std::string> staged_props_;
+};
+
+REGISTER_ZYGISK_MODULE(DrmSpooferModule)
