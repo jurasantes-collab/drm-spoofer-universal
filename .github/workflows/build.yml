@@ -21,14 +21,19 @@ jobs:
         run: |
           set -e
           rm -rf out drm-spoofer-universal.zip
-          mkdir -p out/zygisk
+          mkdir -p out/zygisk out/config
           cp module.prop out/
           cp drm.prop out/
           cp target.prop out/
           cp device.prop out/
           cp service.sh out/
           cp customize.sh out/
+          cp config/target.txt config/fix.prop out/config/
+
+          # Garante quebras de linha LF em scripts e arquivos de configuração
+          find out -type f \( -name "*.sh" -o -name "*.prop" -o -name "*.txt" \) -exec sed -i 's/\r$//' {} +
           chmod 755 out/service.sh out/customize.sh
+          chmod 644 out/config/target.txt out/config/fix.prop
 
           TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
           FLAGS="-std=c++17 -O2 -shared -fPIC -fvisibility=hidden -static-libstdc++ -Wl,--gc-sections -s"
