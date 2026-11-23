@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cerrno>
 #include <fstream>
 #include <string>
 #include <unordered_set>
@@ -14,13 +15,15 @@
 #include <algorithm>
 #include "zygisk.hpp"
 
-// Mantenha desativado para evitar rastro em logcat
-// #define SPOOF_DEBUG
+// ATIVO APENAS PARA DIAGNOSTICO NO MATLOG (desative depois de achar o erro)
+#define SPOOF_DEBUG
 
 #ifdef SPOOF_DEBUG
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "SysCore", __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "SysCore", __VA_ARGS__)
 #else
 #define LOGD(...) do {} while (0)
+#define LOGE(...) do {} while (0)
 #endif
 
 using zygisk::Api;
@@ -59,9 +62,16 @@ std::string trim(const std::string &in) {
 }
 
 std::string resolveModuleDir(Api *api) {
-    if (!api) return kDefaultModDir;
+    if (!api) {
+        LOGE("resolveModuleDir: api null, usando fallback %s", kDefaultModDir);
+        return kDefaultModDir;
+    }
     ScopedFd dir_guard(api->getModuleDir());
-    if (dir_guard.fd < 0) return kDefaultModDir;
+    if (dir_guard.fd < 0) {
+        LOGE("resolveModuleDir: getModuleDir falhou (fd=%d, errno=%d), usando fallback %s",
+             dir_guard.fd, errno, kDefaultModDir);
+        return kDefaultModDir;
+    }
 
     char fd_link[64];
     std::snprintf(fd_link, sizeof(fd_link), "/proc/self/fd/%d", dir_guard.fd);
@@ -69,28 +79,37 @@ std::string resolveModuleDir(Api *api) {
     const ssize_t n = readlink(fd_link, resolved, sizeof(resolved) - 1);
     if (n > 0) {
         resolved[n] = '\0';
+        LOGD("resolveModuleDir: resolvido=%s", resolved);
         return std::string(resolved);
     }
+    LOGE("resolveModuleDir: readlink falhou (errno=%d), usando fallback %s", errno, kDefaultModDir);
     return kDefaultModDir;
 }
 
 std::unordered_set<std::string> loadTargets(const std::string &path) {
     std::unordered_set<std::string> set;
     std::ifstream ifs(path);
-    if (!ifs.is_open()) return set;
+    if (!ifs.is_open()) {
+        LOGE("loadTargets: FALHA ao abrir %s (errno=%d)", path.c_str(), errno);
+        return set;
+    }
 
     std::string line;
     while (std::getline(ifs, line)) {
         const std::string c = trim(line);
         if (!c.empty() && c[0] != '#') set.insert(c);
     }
+    LOGD("loadTargets: carregados %zu pacotes de %s", set.size(), path.c_str());
     return set;
 }
 
 std::unordered_map<std::string, std::string> loadKeyVals(const std::string &path) {
     std::unordered_map<std::string, std::string> map;
     std::ifstream ifs(path);
-    if (!ifs.is_open()) return map;
+    if (!ifs.is_open()) {
+        LOGE("loadKeyVals: FALHA ao abrir %s (errno=%d)", path.c_str(), errno);
+        return map;
+    }
 
     std::string line;
     while (std::getline(ifs, line)) {
@@ -104,6 +123,7 @@ std::unordered_map<std::string, std::string> loadKeyVals(const std::string &path
         const std::string v = trim(c.substr(eq + 1));
         if (!k.empty()) map[k] = v;
     }
+    LOGD("loadKeyVals: carregadas %zu chaves de %s", map.size(), path.c_str());
     return map;
 }
 
@@ -188,6 +208,7 @@ int hooked_system_property_get(const char *name, char *value) {
             const size_t n = std::min(override_val.size(), kMaxPropLen);
             std::memcpy(value, override_val.data(), n);
             value[n] = '\0';
+            LOGD("prop_get override: %s -> %s", name, value);
             wipeString(override_val);
             return static_cast<int>(n);
         }
@@ -236,6 +257,7 @@ void applyJavaStringField(JNIEnv *env, jclass cls, const char *field, const std:
     jfieldID fid = env->GetStaticFieldID(cls, field, "Ljava/lang/String;");
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
+        LOGE("applyJavaStringField: GetStaticFieldID falhou para %s", field);
         return;
     }
     if (!fid) return;
@@ -243,16 +265,26 @@ void applyJavaStringField(JNIEnv *env, jclass cls, const char *field, const std:
     jstring jstr = env->NewStringUTF(val.c_str());
     if (jstr) {
         env->SetStaticObjectField(cls, fid, jstr);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+            LOGE("applyJavaStringField: SetStaticObjectField falhou para %s", field);
+        } else {
+            LOGD("Build field alterado: %s = %s", field, val.c_str());
+        }
         env->DeleteLocalRef(jstr);
     }
 }
 
 void applyJavaBuildSpoof(JNIEnv *env, const std::unordered_map<std::string, std::string> &props) {
-    if (!env) return;
+    if (!env) {
+        LOGE("applyJavaBuildSpoof: env null");
+        return;
+    }
 
     jclass build_cls = env->FindClass("android/os/Build");
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
+        LOGE("applyJavaBuildSpoof: FindClass android/os/Build falhou");
         return;
     }
     if (build_cls) {
@@ -270,6 +302,7 @@ void applyJavaBuildSpoof(JNIEnv *env, const std::unordered_map<std::string, std:
     jclass ver_cls = env->FindClass("android/os/Build$VERSION");
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
+        LOGE("applyJavaBuildSpoof: FindClass Build$VERSION falhou");
         return;
     }
     if (ver_cls) {
@@ -291,92 +324,19 @@ public:
     void onLoad(Api *api, JNIEnv *env) override {
         api_ = api;
         env_ = env;
+        LOGD("onLoad chamado (pid=%d, api=%p, env=%p)", getpid(), api_, env_);
     }
 
     void preAppSpecialize(AppSpecializeArgs *args) override {
         clearStaging();
-        if (!args || !args->nice_name || !env_) return;
+        if (!args || !args->nice_name || !env_) {
+            LOGE("preAppSpecialize: args/nice_name/env invalido");
+            return;
+        }
 
         const char *raw = env_->GetStringUTFChars(args->nice_name, nullptr);
         if (!raw) return;
         std::string pkg(raw);
         env_->ReleaseStringUTFChars(args->nice_name, raw);
 
-        if (pkg.empty()) return;
-
-        const std::string base = resolveModuleDir(api_);
-        const auto targets = loadTargets(base + "/target.prop");
-        if (targets.find(pkg) == targets.end()) {
-            wipeString(pkg);
-            return;
-        }
-
-        matched_ = true;
-        staged_props_ = loadKeyVals(base + "/device.prop");
-
-        const auto drm_kv = loadKeyVals(base + "/drm.prop");
-        auto it_drm = drm_kv.find("drm_id");
-        if (it_drm != drm_kv.end() && !it_drm->second.empty()) {
-            staged_drm_ = it_drm->second;
-        } else {
-            staged_drm_ = generateHex32Bytes();
-        }
-
-        LOGD("Target matched: %s", pkg.c_str());
-        wipeString(pkg);
-    }
-
-    void postAppSpecialize(const AppSpecializeArgs *args) override {
-        (void)args;
-        if (!matched_) return;
-
-        applyJavaBuildSpoof(env_, staged_props_);
-
-        {
-            auto &st = runtimeState();
-            std::lock_guard<std::mutex> lock(st.mtx);
-            st.props = std::move(staged_props_);
-            st.drm_id = std::move(staged_drm_);
-            st.enabled = true;
-        }
-
-        if (api_) {
-            api_->pltHookRegister(".*", "__system_property_get",
-                                  reinterpret_cast<void *>(&hooked_system_property_get),
-                                  reinterpret_cast<void **>(&orig_system_property_get));
-#if defined(__ANDROID_API__) && __ANDROID_API__ >= 29
-            api_->pltHookRegister(".*", "__system_property_read_callback",
-                                  reinterpret_cast<void *>(&hooked_system_property_read_callback),
-                                  reinterpret_cast<void **>(&orig_system_property_read_callback));
-#endif
-            api_->pltHookCommit();
-        }
-
-        clearStaging();
-        LOGD("Runtime hooks committed");
-    }
-
-    void preServerSpecialize(ServerSpecializeArgs *args) override { (void)args; }
-    void postServerSpecialize(const ServerSpecializeArgs *args) override { (void)args; }
-
-private:
-    void clearStaging() {
-        matched_ = false;
-        wipeString(staged_drm_);
-        for (auto &kv : staged_props_) {
-            std::string k = kv.first;
-            std::string v = kv.second;
-            wipeString(k);
-            wipeString(v);
-        }
-        staged_props_.clear();
-    }
-
-    Api *api_ = nullptr;
-    JNIEnv *env_ = nullptr;
-    bool matched_ = false;
-    std::string staged_drm_;
-    std::unordered_map<std::string, std::string> staged_props_;
-};
-
-REGISTER_ZYGISK_MODULE(DrmSpooferModule)
+        if (pkg.empty
