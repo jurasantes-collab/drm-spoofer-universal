@@ -169,10 +169,13 @@ bool lookupOverrideLocked(const ActiveRuntimeState &st, const char *name, std::s
 }
 
 int (*orig_system_property_get)(const char *name, char *value) = nullptr;
+
+#if defined(__ANDROID_API__) && __ANDROID_API__ >= 29
 void (*orig_system_property_read_callback)(
     const prop_info *pi,
     void (*callback)(void *cookie, const char *name, const char *value, uint32_t serial),
     void *cookie) = nullptr;
+#endif
 
 int hooked_system_property_get(const char *name, char *value) {
     if (!orig_system_property_get) return 0;
@@ -192,6 +195,7 @@ int hooked_system_property_get(const char *name, char *value) {
     return orig_system_property_get(name, value);
 }
 
+#if defined(__ANDROID_API__) && __ANDROID_API__ >= 29
 void hooked_system_property_read_callback(
     const prop_info *pi,
     void (*callback)(void *cookie, const char *name, const char *value, uint32_t serial),
@@ -225,6 +229,7 @@ void hooked_system_property_read_callback(
 
     orig_system_property_read_callback(pi, callback, cookie);
 }
+#endif
 
 void applyJavaStringField(JNIEnv *env, jclass cls, const char *field, const std::string &val) {
     if (!env || !cls || val.empty()) return;
@@ -339,9 +344,11 @@ public:
             api_->pltHookRegister(".*", "__system_property_get",
                                   reinterpret_cast<void *>(&hooked_system_property_get),
                                   reinterpret_cast<void **>(&orig_system_property_get));
+#if defined(__ANDROID_API__) && __ANDROID_API__ >= 29
             api_->pltHookRegister(".*", "__system_property_read_callback",
                                   reinterpret_cast<void *>(&hooked_system_property_read_callback),
                                   reinterpret_cast<void **>(&orig_system_property_read_callback));
+#endif
             api_->pltHookCommit();
         }
 
