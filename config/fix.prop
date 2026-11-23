@@ -1,1 +1,13 @@
+MANUFACTURER=samsung
+MODEL=SM-N9600
+BRAND=samsung
+PRODUCT=crownqlteub
+DEVICE=crownqlte
+FINGERPRINT=samsung/crownqlteub/crownqlte:9/PPR1.180610.011/N9600ZHS4CSL2:user/release-keys
+ro.product.manufacturer=samsung
+ro.product.brand=samsung
+ro.product.model=SM-N9600
+ro.product.device=crownqlte
+ro.product.name=crownqlteub
+ro.build.fingerprint=samsung/crownqlteub/crownqlte:9/PPR1.180610.011/N9600ZHS4CSL2:user/release-keys
 
