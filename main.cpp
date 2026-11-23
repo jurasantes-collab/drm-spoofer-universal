@@ -15,7 +15,6 @@
 #include <algorithm>
 #include "zygisk.hpp"
 
-// ATIVO APENAS PARA DIAGNOSTICO NO MATLOG (desative depois de achar o erro)
 #define SPOOF_DEBUG
 
 #ifdef SPOOF_DEBUG
@@ -290,7 +289,8 @@ void applyJavaBuildSpoof(JNIEnv *env, const std::unordered_map<std::string, std:
     if (build_cls) {
         static constexpr const char *kBuildFields[] = {
             "MANUFACTURER", "MODEL", "FINGERPRINT", "BRAND", "PRODUCT",
-            "DEVICE", "ID", "DISPLAY", "BOOTLOADER", "SERIAL", "TYPE", "TAGS"
+            "DEVICE", "BOARD", "HARDWARE", "HOST", "USER",
+            "ID", "DISPLAY", "BOOTLOADER", "SERIAL", "TYPE", "TAGS"
         };
         for (const char *f : kBuildFields) {
             auto it = props.find(f);
