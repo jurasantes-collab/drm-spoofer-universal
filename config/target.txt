@@ -1,1 +1,4 @@
+com.ytheekshana.deviceinfo
+ru.andr7e.deviceinfohw
+flar2.devcheck
 
