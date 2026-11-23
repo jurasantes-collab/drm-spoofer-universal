@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <fstream>
 #include <string>
+#include <vector>
 #include <unordered_set>
 #include <unordered_map>
 #include <mutex>
@@ -66,16 +67,9 @@ bool fileExists(const std::string &path) {
 }
 
 std::string resolveModuleDir(Api *api) {
-    if (!api) {
-        LOGE("resolveModuleDir: api null, usando fallback %s", kDefaultModDir);
-        return kDefaultModDir;
-    }
+    if (!api) return kDefaultModDir;
     ScopedFd dir_guard(api->getModuleDir());
-    if (dir_guard.fd < 0) {
-        LOGE("resolveModuleDir: getModuleDir falhou (fd=%d, errno=%d), usando fallback %s",
-             dir_guard.fd, errno, kDefaultModDir);
-        return kDefaultModDir;
-    }
+    if (dir_guard.fd < 0) return kDefaultModDir;
 
     char fd_link[64];
     std::snprintf(fd_link, sizeof(fd_link), "/proc/self/fd/%d", dir_guard.fd);
@@ -83,10 +77,8 @@ std::string resolveModuleDir(Api *api) {
     const ssize_t n = readlink(fd_link, resolved, sizeof(resolved) - 1);
     if (n > 0) {
         resolved[n] = '\0';
-        LOGD("resolveModuleDir: resolvido=%s", resolved);
         return std::string(resolved);
     }
-    LOGE("resolveModuleDir: readlink falhou (errno=%d), usando fallback %s", errno, kDefaultModDir);
     return kDefaultModDir;
 }
 
@@ -194,13 +186,6 @@ bool lookupOverrideLocked(const ActiveRuntimeState &st, const char *name, std::s
 
 int (*orig_system_property_get)(const char *name, char *value) = nullptr;
 
-#if defined(__ANDROID_API__) && __ANDROID_API__ >= 29
-void (*orig_system_property_read_callback)(
-    const prop_info *pi,
-    void (*callback)(void *cookie, const char *name, const char *value, uint32_t serial),
-    void *cookie) = nullptr;
-#endif
-
 int hooked_system_property_get(const char *name, char *value) {
     if (!orig_system_property_get) return 0;
 
@@ -212,7 +197,6 @@ int hooked_system_property_get(const char *name, char *value) {
             const size_t n = std::min(override_val.size(), kMaxPropLen);
             std::memcpy(value, override_val.data(), n);
             value[n] = '\0';
-            LOGD("prop_get override: %s -> %s", name, value);
             wipeString(override_val);
             return static_cast<int>(n);
         }
@@ -220,106 +204,83 @@ int hooked_system_property_get(const char *name, char *value) {
     return orig_system_property_get(name, value);
 }
 
-#if defined(__ANDROID_API__) && __ANDROID_API__ >= 29
-void hooked_system_property_read_callback(
-    const prop_info *pi,
-    void (*callback)(void *cookie, const char *name, const char *value, uint32_t serial),
-    void *cookie) {
-    if (!orig_system_property_read_callback) return;
-    if (!pi || !callback) {
-        orig_system_property_read_callback(pi, callback, cookie);
+void injectDexAndApply(JNIEnv *env, const std::string &dex_path,
+                       const std::unordered_map<std::string, std::string> &props) {
+    if (!env || !fileExists(dex_path)) {
+        LOGE("injectDexAndApply: dex ausente em %s", dex_path.c_str());
         return;
     }
 
-    char prop_name[PROP_NAME_MAX] = {0};
-    char prop_val[PROP_VALUE_MAX] = {0};
-    __system_property_read(pi, prop_name, prop_val);
-    std::memset(prop_val, 0, sizeof(prop_val));
+    jclass cls_loader_cls = env->FindClass("java/lang/ClassLoader");
+    jmethodID get_sys_loader = env->GetStaticMethodID(
+        cls_loader_cls, "getSystemClassLoader", "()Ljava/lang/ClassLoader;");
+    jobject sys_loader = env->CallStaticObjectMethod(cls_loader_cls, get_sys_loader);
 
-    if (prop_name[0] != '\0') {
-        auto &st = runtimeState();
-        std::lock_guard<std::mutex> lock(st.mtx);
-        std::string override_val;
-        if (lookupOverrideLocked(st, prop_name, override_val)) {
-            char safe_val[PROP_VALUE_MAX] = {0};
-            const size_t n = std::min(override_val.size(), kMaxPropLen);
-            std::memcpy(safe_val, override_val.data(), n);
-            safe_val[n] = '\0';
-            wipeString(override_val);
-            callback(cookie, prop_name, safe_val, 1);
-            std::memset(safe_val, 0, sizeof(safe_val));
-            return;
-        }
+    jclass path_loader_cls = env->FindClass("dalvik/system/PathClassLoader");
+    jmethodID path_loader_init = env->GetMethodID(
+        path_loader_cls, "<init>", "(Ljava/lang/String;Ljava/lang/ClassLoader;)V");
+
+    jstring j_dex_path = env->NewStringUTF(dex_path.c_str());
+    jobject dex_loader = env->NewObject(path_loader_cls, path_loader_init, j_dex_path, sys_loader);
+    if (env->ExceptionCheck() || !dex_loader) {
+        env->ExceptionClear();
+        LOGE("injectDexAndApply: falha ao criar PathClassLoader");
+        return;
     }
 
-    orig_system_property_read_callback(pi, callback, cookie);
-}
-#endif
+    jmethodID load_class = env->GetMethodID(
+        cls_loader_cls, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+    jstring j_cls_name = env->NewStringUTF("com.syscore.spoofer.SpoofEntry");
+    jclass entry_cls = static_cast<jclass>(
+        env->CallObjectMethod(dex_loader, load_class, j_cls_name));
+    if (env->ExceptionCheck() || !entry_cls) {
+        env->ExceptionClear();
+        LOGE("injectDexAndApply: falha ao carregar SpoofEntry");
+        return;
+    }
 
-void applyJavaStringField(JNIEnv *env, jclass cls, const char *field, const std::string &val) {
-    if (!env || !cls || val.empty()) return;
-    jfieldID fid = env->GetStaticFieldID(cls, field, "Ljava/lang/String;");
+    jmethodID apply_mid = env->GetStaticMethodID(
+        entry_cls, "apply", "([Ljava/lang/String;[Ljava/lang/String;)V");
+    if (env->ExceptionCheck() || !apply_mid) {
+        env->ExceptionClear();
+        LOGE("injectDexAndApply: metodo apply nao encontrado");
+        return;
+    }
+
+    jclass str_cls = env->FindClass("java/lang/String");
+    const jsize count = static_cast<jsize>(props.size());
+    jobjectArray j_keys = env->NewObjectArray(count, str_cls, nullptr);
+    jobjectArray j_vals = env->NewObjectArray(count, str_cls, nullptr);
+
+    jsize idx = 0;
+    for (const auto &kv : props) {
+        jstring jk = env->NewStringUTF(kv.first.c_str());
+        jstring jv = env->NewStringUTF(kv.second.c_str());
+        env->SetObjectArrayElement(j_keys, idx, jk);
+        env->SetObjectArrayElement(j_vals, idx, jv);
+        env->DeleteLocalRef(jk);
+        env->DeleteLocalRef(jv);
+        ++idx;
+    }
+
+    env->CallStaticVoidMethod(entry_cls, apply_mid, j_keys, j_vals);
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
-        LOGE("applyJavaStringField: GetStaticFieldID falhou para %s", field);
-        return;
-    }
-    if (!fid) return;
-
-    jstring jstr = env->NewStringUTF(val.c_str());
-    if (jstr) {
-        env->SetStaticObjectField(cls, fid, jstr);
-        if (env->ExceptionCheck()) {
-            env->ExceptionClear();
-            LOGE("applyJavaStringField: SetStaticObjectField falhou para %s", field);
-        } else {
-            LOGD("Build field alterado: %s = %s", field, val.c_str());
-        }
-        env->DeleteLocalRef(jstr);
-    }
-}
-
-void applyJavaBuildSpoof(JNIEnv *env, const std::unordered_map<std::string, std::string> &props) {
-    if (!env) {
-        LOGE("applyJavaBuildSpoof: env null");
-        return;
+        LOGE("injectDexAndApply: excecao dentro de SpoofEntry.apply");
+    } else {
+        LOGD("injectDexAndApply: classes.dex executado com sucesso");
     }
 
-    jclass build_cls = env->FindClass("android/os/Build");
-    if (env->ExceptionCheck()) {
-        env->ExceptionClear();
-        LOGE("applyJavaBuildSpoof: FindClass android/os/Build falhou");
-        return;
-    }
-    if (build_cls) {
-        static constexpr const char *kBuildFields[] = {
-            "MANUFACTURER", "MODEL", "FINGERPRINT", "BRAND", "PRODUCT",
-            "DEVICE", "BOARD", "HARDWARE", "HOST", "USER",
-            "ID", "DISPLAY", "BOOTLOADER", "SERIAL", "TYPE", "TAGS"
-        };
-        for (const char *f : kBuildFields) {
-            auto it = props.find(f);
-            if (it != props.end()) applyJavaStringField(env, build_cls, f, it->second);
-        }
-        env->DeleteLocalRef(build_cls);
-    }
-
-    jclass ver_cls = env->FindClass("android/os/Build$VERSION");
-    if (env->ExceptionCheck()) {
-        env->ExceptionClear();
-        LOGE("applyJavaBuildSpoof: FindClass Build$VERSION falhou");
-        return;
-    }
-    if (ver_cls) {
-        static constexpr const char *kVerFields[] = {
-            "RELEASE", "INCREMENTAL", "SECURITY_PATCH"
-        };
-        for (const char *vf : kVerFields) {
-            auto it = props.find(vf);
-            if (it != props.end()) applyJavaStringField(env, ver_cls, vf, it->second);
-        }
-        env->DeleteLocalRef(ver_cls);
-    }
+    env->DeleteLocalRef(j_keys);
+    env->DeleteLocalRef(j_vals);
+    env->DeleteLocalRef(str_cls);
+    env->DeleteLocalRef(entry_cls);
+    env->DeleteLocalRef(j_cls_name);
+    env->DeleteLocalRef(dex_loader);
+    env->DeleteLocalRef(j_dex_path);
+    env->DeleteLocalRef(sys_loader);
+    env->DeleteLocalRef(path_loader_cls);
+    env->DeleteLocalRef(cls_loader_cls);
 }
 
 } // namespace
@@ -329,51 +290,38 @@ public:
     void onLoad(Api *api, JNIEnv *env) override {
         api_ = api;
         env_ = env;
-        LOGD("onLoad chamado (pid=%d, api=%p, env=%p)", getpid(), api_, env_);
     }
 
     void preAppSpecialize(AppSpecializeArgs *args) override {
         clearStaging();
-        if (!args || !args->nice_name || !env_) {
-            LOGE("preAppSpecialize: args/nice_name/env invalido");
-            return;
-        }
+        if (!args || !args->nice_name || !env_) return;
 
         const char *raw = env_->GetStringUTFChars(args->nice_name, nullptr);
         if (!raw) return;
         std::string pkg(raw);
         env_->ReleaseStringUTFChars(args->nice_name, raw);
+        if (pkg.empty()) return;
 
-        if (pkg.empty()) {
-            LOGE("preAppSpecialize: pkg vazio");
-            return;
-        }
-        LOGD("preAppSpecialize: processo=%s", pkg.c_str());
-
-        const std::string base = resolveModuleDir(api_);
-        const std::string cfg_target = base + "/config/target.txt";
-        const std::string target_path = fileExists(cfg_target) ? cfg_target : (base + "/target.prop");
+        mod_dir_ = resolveModuleDir(api_);
+        const std::string cfg_target = mod_dir_ + "/config/target.txt";
+        const std::string target_path = fileExists(cfg_target) ? cfg_target : (mod_dir_ + "/target.prop");
 
         const auto targets = loadTargets(target_path);
         if (targets.find(pkg) == targets.end()) {
-            LOGD("preAppSpecialize: %s nao esta em %s", pkg.c_str(), target_path.c_str());
             wipeString(pkg);
             return;
         }
 
         matched_ = true;
-        const std::string cfg_prop = base + "/config/fix.prop";
-        const std::string prop_path = fileExists(cfg_prop) ? cfg_prop : (base + "/device.prop");
-
+        const std::string cfg_prop = mod_dir_ + "/config/fix.prop";
+        const std::string prop_path = fileExists(cfg_prop) ? cfg_prop : (mod_dir_ + "/device.prop");
         staged_props_ = loadKeyVals(prop_path);
 
-        const auto drm_kv = loadKeyVals(base + "/drm.prop");
+        const auto drm_kv = loadKeyVals(mod_dir_ + "/drm.prop");
         auto it_drm = drm_kv.find("drm_id");
-        if (it_drm != drm_kv.end() && !it_drm->second.empty()) {
-            staged_drm_ = it_drm->second;
-        } else {
-            staged_drm_ = generateHex32Bytes();
-        }
+        staged_drm_ = (it_drm != drm_kv.end() && !it_drm->second.empty())
+                          ? it_drm->second
+                          : generateHex32Bytes();
 
         LOGD("Target matched: %s (props=%zu, prop_file=%s)",
              pkg.c_str(), staged_props_.size(), prop_path.c_str());
@@ -384,8 +332,7 @@ public:
         (void)args;
         if (!matched_) return;
 
-        LOGD("postAppSpecialize: iniciando injecao (pid=%d)", getpid());
-        applyJavaBuildSpoof(env_, staged_props_);
+        injectDexAndApply(env_, mod_dir_ + "/classes.dex", staged_props_);
 
         {
             auto &st = runtimeState();
@@ -399,19 +346,11 @@ public:
             api_->pltHookRegister(".*", "__system_property_get",
                                   reinterpret_cast<void *>(&hooked_system_property_get),
                                   reinterpret_cast<void **>(&orig_system_property_get));
-#if defined(__ANDROID_API__) && __ANDROID_API__ >= 29
-            api_->pltHookRegister(".*", "__system_property_read_callback",
-                                  reinterpret_cast<void *>(&hooked_system_property_read_callback),
-                                  reinterpret_cast<void **>(&orig_system_property_read_callback));
-#endif
             bool ok = api_->pltHookCommit();
             LOGD("pltHookCommit=%d orig_get=%p", ok ? 1 : 0, orig_system_property_get);
-        } else {
-            LOGE("postAppSpecialize: api_ null no pltHook");
         }
 
         clearStaging();
-        LOGD("Runtime hooks committed");
     }
 
     void preServerSpecialize(ServerSpecializeArgs *args) override { (void)args; }
@@ -433,6 +372,7 @@ private:
     Api *api_ = nullptr;
     JNIEnv *env_ = nullptr;
     bool matched_ = false;
+    std::string mod_dir_;
     std::string staged_drm_;
     std::unordered_map<std::string, std::string> staged_props_;
 };
