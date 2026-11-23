@@ -60,6 +60,11 @@ std::string trim(const std::string &in) {
     return in.substr(b, e - b + 1);
 }
 
+bool fileExists(const std::string &path) {
+    std::ifstream ifs(path);
+    return ifs.good();
+}
+
 std::string resolveModuleDir(Api *api) {
     if (!api) {
         LOGE("resolveModuleDir: api null, usando fallback %s", kDefaultModDir);
@@ -346,15 +351,21 @@ public:
         LOGD("preAppSpecialize: processo=%s", pkg.c_str());
 
         const std::string base = resolveModuleDir(api_);
-        const auto targets = loadTargets(base + "/target.prop");
+        const std::string cfg_target = base + "/config/target.txt";
+        const std::string target_path = fileExists(cfg_target) ? cfg_target : (base + "/target.prop");
+
+        const auto targets = loadTargets(target_path);
         if (targets.find(pkg) == targets.end()) {
-            LOGD("preAppSpecialize: %s nao esta no target.prop", pkg.c_str());
+            LOGD("preAppSpecialize: %s nao esta em %s", pkg.c_str(), target_path.c_str());
             wipeString(pkg);
             return;
         }
 
         matched_ = true;
-        staged_props_ = loadKeyVals(base + "/device.prop");
+        const std::string cfg_prop = base + "/config/fix.prop";
+        const std::string prop_path = fileExists(cfg_prop) ? cfg_prop : (base + "/device.prop");
+
+        staged_props_ = loadKeyVals(prop_path);
 
         const auto drm_kv = loadKeyVals(base + "/drm.prop");
         auto it_drm = drm_kv.find("drm_id");
@@ -364,7 +375,8 @@ public:
             staged_drm_ = generateHex32Bytes();
         }
 
-        LOGD("Target matched: %s (props=%zu)", pkg.c_str(), staged_props_.size());
+        LOGD("Target matched: %s (props=%zu, prop_file=%s)",
+             pkg.c_str(), staged_props_.size(), prop_path.c_str());
         wipeString(pkg);
     }
 
