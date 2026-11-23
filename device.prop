@@ -1,8 +1,3 @@
-# ==========================================================
-# PERFIL COMPLETO (ESTILO TARGETEDFIX V5 + HARDWARE NATIVO)
-# ==========================================================
-
-# --- BUILD FIELDS (Java android.os.Build) ---
 MANUFACTURER=samsung
 MODEL=SM-N9600
 FINGERPRINT=samsung/crownqlteub/crownqlte:9/PPR1.180610.011/N9600ZHS4CSL2:user/release-keys
@@ -15,133 +10,36 @@ DISPLAY=PPR1.180610.011.N9600ZHS4CSL2
 INCREMENTAL=N9600ZHS4CSL2
 BOOTLOADER=N9600ZHS4CSL2
 SERIAL=R58K914728N
-TIME=1576769410000
 TYPE=user
 TAGS=release-keys
 SECURITY_PATCH=2019-12-01
 SDK_INT=28
 
-# --- WILDCARDS NATIVOS ---
-*.build.id=PPR1.180610.011
-*.security_patch=2019-12-01
-*api_level=27
-
-# --- HARDWARE E PLACA (Snapdragon 845 - sdm845) ---
-BOARD=sdm845
-HARDWARE=qcom
-ro.product.board=sdm845
-ro.board.platform=sdm845
-ro.vendor.board.platform=sdm845
-ro.hardware=qcom
-ro.hardware.chipname=SDM845
-ro.boot.hardware=qcom
-
-# --- IDENTIDADE COMPLETA (System, Product e Vendor) ---
 ro.product.manufacturer=samsung
 ro.product.brand=samsung
 ro.product.model=SM-N9600
 ro.product.device=crownqlte
 ro.product.name=crownqlteub
-ro.product.system.manufacturer=samsung
-ro.product.system.brand=samsung
-ro.product.system.model=SM-N9600
-ro.product.system.device=crownqlte
-ro.product.system.name=crownqlteub
-ro.product.vendor.manufacturer=samsung
-ro.product.vendor.brand=samsung
-ro.product.vendor.model=SM-N9600
-ro.product.vendor.device=crownqlte
-ro.product.vendor.name=crownqlteub
-ro.vendor.product.manufacturer=samsung
-ro.vendor.product.brand=samsung
-ro.vendor.product.model=SM-N9600
-ro.vendor.product.device=crownqlte
-ro.vendor.product.name=crownqlteub
 ro.build.product=crownqlte
-ro.build.tf_modelnumber=SM-N9600
 ro.build.flavor=crownqlteub-user
-
-# --- FINGERPRINTS, DATAS E BUILDS EXTRAS ---
 ro.build.fingerprint=samsung/crownqlteub/crownqlte:9/PPR1.180610.011/N9600ZHS4CSL2:user/release-keys
-ro.system.build.fingerprint=samsung/crownqlteub/crownqlte:9/PPR1.180610.011/N9600ZHS4CSL2:user/release-keys
-ro.vendor.build.fingerprint=samsung/crownqlteub/crownqlte:9/PPR1.180610.011/N9600ZHS4CSL2:user/release-keys
-ro.product.build.fingerprint=samsung/crownqlteub/crownqlte:9/PPR1.180610.011/N9600ZHS4CSL2:user/release-keys
-ro.odm.build.fingerprint=samsung/crownqlteub/crownqlte:9/PPR1.180610.011/N9600ZHS4CSL2:user/release-keys
 ro.build.display.id=PPR1.180610.011.N9600ZHS4CSL2
 ro.build.version.incremental=N9600ZHS4CSL2
-ro.system.build.version.incremental=N9600ZHS4CSL2
-ro.vendor.build.version.incremental=N9600ZHS4CSL2
 ro.build.description=crownqlteub-user 9 PPR1.180610.011 N9600ZHS4CSL2 release-keys
-ro.build.PDA=N9600ZHS4CSL2
-ro.build.sw_version=N9600ZHS4CSL2
-ro.build.date=Thu Dec 19 15:30:10 KST 2019
-ro.build.date.utc=1576769410
-ro.system.build.date=Thu Dec 19 15:30:10 KST 2019
-ro.system.build.date.utc=1576769410
-gsm.version.baseband=N9600ZHS4CSL2,N9600ZHS4CSL2
-
-# --- DNA OFICIAL SAMSUNG (One UI & Release Keys) ---
-ro.build.version.sem=2801
-ro.build.version.sep=100100
-ro.build.version.oneui=10000
-ro.build.official.release=true
-ro.build.user=dpi
-ro.build.host=SWDH8411
 ro.build.tags=release-keys
 ro.build.type=user
-ro.system.build.tags=release-keys
-ro.system.build.type=user
-ro.vendor.build.tags=release-keys
-ro.vendor.build.type=user
-ro.product.build.tags=release-keys
-ro.product.build.type=user
-ro.odm.build.tags=release-keys
-ro.odm.build.type=user
-
-# --- BOOTLOADER, SERIAL E KNOX ---
 ro.bootloader=N9600ZHS4CSL2
-ro.boot.bootloader=N9600ZHS4CSL2
 ro.serialno=R58K914728N
-ro.boot.serialno=R58K914728N
 ro.boot.verifiedbootstate=green
 ro.boot.flash.locked=1
-ro.boot.veritymode=enforcing
-ro.boot.vbmeta.device_state=locked
-ro.boot.warranty_bit=0
-ro.warranty_bit=0
 ro.secure=1
 ro.debuggable=0
 ro.adb.secure=1
-
-# --- REGIAO E REDE ---
 ro.product.locale=pt-BR
 ro.csc.country_code=BRAZIL
 ro.csc.countryiso_code=BR
 ro.csc.sales_code=ZTO
 ro.build.characteristics=phone
 
-# --- KERNEL LINUX (/proc/version e uname) ---
-kernel_release=4.9.112-17257921
-kernel_version=#1 SMP PREEMPT Thu Dec 19 15:30:10 KST 2019
-full_proc_version=Linux version 4.9.112-17257921 (dpi@SWDH8411) (gcc version 4.9.x 20150123 (prerelease) (GCC)) #1 SMP PREEMPT Thu Dec 19 15:30:10 KST 2019
-
-# --- CPU, GPU, RAM, ARMAZENAMENTO E TELA + SYSFS ---
-cpu_hardware=Qualcomm Technologies, Inc SDM845
-cpu_model_name=ARMv8 Processor rev 12 (v8l)
-cpu_cores=8
-cpu_arch=aarch64
-cpu_max_freq=2803200
-cpu_min_freq=300000
-soc_id=321
-
-gpu_vendor=Qualcomm
-gpu_renderer=Adreno (TM) 630
-gpu_version=OpenGL ES 3.2 V@0415.0
-gpu_model_sysfs=Adreno630v2
-
-ram_gb=6
-storage_gb=128
-
-screen_width=1440
-screen_height=2960
-screen_dpi=560
+kernel_release=3.10.108
+cpu_arch=armeabi-v7a
